@@ -1,8 +1,9 @@
 # Image based secret message hiding and retrieval using LSB steganography
 
 A Cryptography and Network Security mini project for Module 1. A local Python
-application hides UTF-8 text in PNG pixels and recovers it without changing the
-original file. It includes a browser interface, a command-line interface, source
+application accepts many raster image formats, hides UTF-8 text in their decoded
+pixels, and saves a new lossless PNG without changing the original file.
+It includes a browser interface, a command-line interface, source
 code, tests, sample images, a report, execution screenshots and a presentation.
 
 ## Start on Windows
@@ -16,7 +17,9 @@ code, tests, sample images, a report, execution screenshots and a presentation.
 6. Click **Test extraction**, or select that saved PNG on the extraction tab.
 
 The launcher uses Python's Windows launcher and creates a local `.venv` if
-available. Its first setup needs internet to install Pillow. When the Windows
+available. Its first setup needs internet to install Pillow and the HEIC/HEIF decoder.
+Run the launcher again after updating an older copy to install the new decoder.
+When the Windows
 Python launcher is absent, it also checks for an existing Codex bundled Python
 that already contains Pillow. It does not install Python itself or change system settings.
 
@@ -25,7 +28,7 @@ If port 8765 is already in use, stop the existing copy or use the manual command
 
 ## Manual setup on Windows macOS or Linux
 
-Requirements: Python 3.10 or newer, Pillow, and a modern browser.
+Requirements: Python 3.10 or newer, Pillow, pillow-heif, and a modern browser.
 
 ```text
 python -m venv .venv
@@ -43,7 +46,7 @@ python -m pip install -r requirements.txt
 python app.py
 ```
 
-On some systems use `python3` instead of `python`. Once Pillow is installed,
+On some systems use `python3` instead of `python`. Once dependencies are installed,
 normal operation needs no internet. Press Ctrl+C in the app's console to stop.
 The server binds only to the computer's loopback address. It is a classroom
 local application, not an internet hosting service.
@@ -53,16 +56,45 @@ local application, not an internet hosting service.
 ```text
 python cli.py inspect samples/sample_cover.png
 python cli.py hide samples/sample_cover.png my_encoded.png --message "Hello CNS"
+python cli.py hide photo.jpg photo_encoded.png --message "A message in my photo"
 python cli.py extract my_encoded.png
 python cli.py extract my_encoded.png --output recovered.txt
 ```
 
 For longer text use `--message-file my_message.txt` instead of `--message`.
 CLI output files must be new files: existing files are never overwritten.
+The `hide` output filename must end in `.png`, regardless of the source format.
+
+## Supported images
+
+Input detection uses the actual file contents, not the filename extension.
+Common supported inputs include PNG, JPEG/JPG/JFIF, WebP, GIF, BMP, TIFF,
+AVIF, HEIC/HEIF, ICO, JPEG 2000, PPM/PGM/PBM, TGA, PCX and QOI.
+Other raster inputs work when their installed Pillow decoder can read them,
+including flattened PSD images. Support depends on installed codecs; this does
+not mean every image format in existence. SVG, PDF, EPS and camera RAW files
+requiring a separate renderer or decoder are outside this version's scope.
+
+- HEIC/HEIF uses `pillow-heif`, included in `requirements.txt`.
+- Animated GIF/APNG and multipage TIFF/HEIF inputs use only the first frame or
+  page. The interface explicitly identifies this. Output is a single still PNG.
+- Phone-photo EXIF orientation is applied before embedding.
+- The server provides a small PNG preview so TIFF and HEIC also display in a
+  browser that cannot display the source format directly.
+- **Encoded output always stays PNG.** JPEG, GIF palette conversion and lossy
+  WebP/AVIF/HEIC re-encoding can alter bits and destroy the message.
+- Extraction accepts readable raster inputs. It succeeds only if their RGB
+  values retain the embedded packet. The original encoded PNG is recommended.
+  Lossless BMP, TIFF or WebP conversions can also retain the payload.
+
+The DOCX report, PPT and numbered execution screenshots document the initial
+PNG-only version. This README and `CHANGELOG.md` describe the broader input
+support added on 16 November 2026. The LSB packet format and PNG output remain
+compatible with the original sample images.
 
 ## What to demonstrate
 
-1. Load `samples/sample_cover.png` and hide your own message.
+1. Load `samples/sample_cover.jpg` (or the original PNG) and hide your own message.
 2. Explain the UTF-8 byte counter and available capacity.
 3. Show the output, quality measurements and pixel-change table.
 4. Download the PNG, then load it again on the extraction tab.
@@ -78,7 +110,7 @@ Add your name, USN, institution and guide to the report and PPT before submissio
 
 | File | Purpose |
 |---|---|
-| `steganography.py` | PNG validation, capacity, LSB embedding, extraction and measurements |
+| `steganography.py` | Image loading, normalisation, previews, capacity, LSB embedding, extraction and measurements |
 | `app.py` | Local HTTP server and API routes |
 | `cli.py` | Optional command-line operations |
 | `web/index.html` | Browser interface structure |
@@ -110,8 +142,9 @@ consume more than one byte, so character count and byte count can differ.
 
 ## Limits and interpretation
 
-- Only still PNGs are accepted. Maximum uploaded size is 12 MiB and maximum image
-  area is 8 million pixels. Outputs larger than 12 MiB are rejected too.
+- Readable raster inputs are accepted and only the first frame or page is used.
+  Maximum uploaded size is 12 MiB and maximum first-frame image area is 8 million
+  pixels. PNG outputs larger than 12 MiB are rejected too.
 - The engine normalises source images to 8-bit RGB or RGBA. It preserves
   transparency in RGBA and skips its alpha channel. It creates a fresh PNG
   without copying source metadata. Quality measurements compare these normalised
@@ -133,14 +166,17 @@ consume more than one byte, so character count and byte count can differ.
 python -m unittest discover -s tests -v
 ```
 
-The suite covers 23 test methods, including Unicode, exact capacity, transparent
-and palette images, unsupported input, packet damage, invalid lengths, independent
-pixel measurements, HTTP round trips, and local-origin restrictions. Local HTTP
+All 32 test methods passed for this update. The suite covers Unicode, exact capacity, transparent and palette images,
+multiple input formats including HEIC, first-frame handling, EXIF orientation,
+browser previews, lossless carrier conversion, unsupported input, packet damage,
+invalid lengths, independent pixel measurements, CLI and HTTP round trips, and
+local-origin restrictions. Local HTTP
 tests need permission to make loopback connections on the computer.
 
 ## References
 
-- Pillow PNG support: https://pillow.readthedocs.io/en/stable/handbook/image-file-formats.html#png
+- Pillow image formats: https://pillow.readthedocs.io/en/stable/handbook/image-file-formats.html
+- HEIC/HEIF plugin: https://pillow-heif.readthedocs.io/en/stable/pillow-plugin.html
 - Python binary packing: https://docs.python.org/3/library/struct.html
 - Python CRC32: https://docs.python.org/3/library/zlib.html#zlib.crc32
 - PNG specification: https://www.w3.org/TR/png-3/

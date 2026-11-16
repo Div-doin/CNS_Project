@@ -10,7 +10,7 @@
 <body>
   <header class="topbar"><a class="brand" href="/">◈ <span>Image Steganography</span></a><span class="local">Runs on your computer</span></header>
   <main>
-    <div class="intro"><p class="eyebrow">CRYPTOGRAPHY AND NETWORK SECURITY</p><h1>Hide a message inside an image.</h1><p class="lede">Explore least significant bits. Save a PNG, then recover the text hidden in its pixels.</p></div>
+    <div class="intro"><p class="eyebrow">CRYPTOGRAPHY AND NETWORK SECURITY</p><h1>Hide a message inside an image.</h1><p class="lede">Start with JPG, PNG, WebP, GIF, BMP, TIFF, AVIF, HEIC or another supported image. Save a PNG to preserve the hidden text.</p></div>
     <div class="workspace">
       <div class="tabs" role="tablist" aria-label="Choose an operation">
         <button id="hide-tab" role="tab" aria-selected="true" aria-controls="hide-panel" class="tab active">01 &nbsp; Hide a message</button>
@@ -21,8 +21,8 @@
         <div class="columns">
           <div class="image-column">
             <div class="section-heading"><h2>Your cover image</h2><button class="text-button action" id="demo">Try a sample</button></div>
-            <label class="upload" id="hide-upload" for="hide-file"><span class="upload-symbol">＋</span><strong>Choose a PNG image</strong><span>Up to 12 MiB and 8 million pixels</span></label>
-            <input id="hide-file" class="file-input" type="file" accept="image/png,.png" aria-label="Choose cover PNG">
+            <label class="upload" id="hide-upload" for="hide-file"><span class="upload-symbol">＋</span><strong>Choose an image</strong><span>Up to 12 MiB and 8 million pixels · First frame only</span></label>
+            <input id="hide-file" class="file-input" type="file" accept="image/*,.heic,.heif,.tif,.tiff,.avif,.jfif,.jpe,.jp2,.j2k,.tga,.pcx,.ppm,.pgm,.pbm,.pnm,.psd,.qoi" aria-label="Choose cover image">
             <div id="hide-preview" class="preview" hidden><img id="hide-image" alt="Selected cover image"><div class="image-caption"><span id="hide-name"></span><button class="text-button action" id="hide-change">Change image</button></div></div>
             <p id="hide-info" class="muted info">The original file stays unchanged. Your output is a separate PNG.</p>
           </div>
@@ -48,8 +48,8 @@
       <section id="extract-panel" role="tabpanel" aria-labelledby="extract-tab" hidden>
         <div class="columns">
           <div class="image-column"><div class="section-heading"><h2>Your encoded image</h2></div>
-            <label class="upload" id="extract-upload" for="extract-file"><span class="upload-symbol">＋</span><strong>Choose an encoded PNG</strong><span>Use a PNG created by this application</span></label>
-            <input id="extract-file" class="file-input" type="file" accept="image/png,.png" aria-label="Choose encoded PNG">
+            <label class="upload" id="extract-upload" for="extract-file"><span class="upload-symbol">＋</span><strong>Choose an encoded image</strong><span>The original encoded PNG gives reliable recovery</span></label>
+            <input id="extract-file" class="file-input" type="file" accept="image/*,.heic,.heif,.tif,.tiff,.avif,.jfif,.jpe,.jp2,.j2k,.tga,.pcx,.ppm,.pgm,.pbm,.pnm,.psd,.qoi" aria-label="Choose encoded image">
             <div id="extract-preview" class="preview" hidden><img id="extract-image" alt="Selected image for extraction"><div class="image-caption"><span id="extract-name"></span><button class="text-button action" id="extract-change">Change image</button></div></div>
             <p id="extract-info" class="muted info">Use the original encoded PNG. Resizing or JPEG conversion can damage its hidden text.</p>
             <button id="decode" class="primary action" disabled>Extract hidden message <span>↗</span></button>

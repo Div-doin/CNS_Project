@@ -9,9 +9,9 @@ from steganography import SteganographyError, decode, encode, inspect_image
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Hide and recover UTF-8 text in PNG pixels")
+    parser = argparse.ArgumentParser(description="Hide text in raster images and recover it; encoded output is lossless PNG")
     commands = parser.add_subparsers(dest="command", required=True)
-    inspect = commands.add_parser("inspect", help="Show PNG capacity")
+    inspect = commands.add_parser("inspect", help="Show image format and message capacity")
     inspect.add_argument("image", type=Path)
     hide = commands.add_parser("hide", help="Save an encoded PNG to a new file")
     hide.add_argument("image", type=Path)
@@ -28,6 +28,8 @@ def main():
         if args.command == "inspect":
             print(json.dumps(inspect_image(data), indent=2))
         elif args.command == "hide":
+            if args.output.suffix.lower() != ".png":
+                raise SteganographyError("Use a .png output filename so the encoded image preserves its hidden bits.")
             if args.message is not None:
                 text = args.message
             else:

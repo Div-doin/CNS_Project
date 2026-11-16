@@ -12,11 +12,11 @@ if not exist ".venv\Scripts\python.exe" (
         exit /b 1
     )
 )
-".venv\Scripts\python.exe" -c "from PIL import Image" >nul 2>&1
+".venv\Scripts\python.exe" -c "from PIL import Image; from pillow_heif import register_heif_opener" >nul 2>&1
 if errorlevel 1 (
     ".venv\Scripts\python.exe" -m pip install -r requirements.txt
     if errorlevel 1 (
-        echo The first setup needs an internet connection to install Pillow.
+        echo Setup needs an internet connection to install the image decoders.
         pause
         exit /b 1
     )
@@ -39,5 +39,7 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
+"%CNS_PYTHON%" -c "import pillow_heif" >nul 2>&1
+if errorlevel 1 echo HEIC support needs the manual setup in README.md. Other supported images remain available.
 "%CNS_PYTHON%" app.py %*
 pause

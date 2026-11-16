@@ -1,4 +1,31 @@
-Image Steganography project verification
+Image Steganography format update verification
+Date: 16 November 2026
+
+Automated tests: all 32 test methods passed with no skips.
+Command: python -m unittest discover -s tests -v
+Environment: Windows, Python 3.13.3, Pillow 13.0.0, pillow-heif 1.8.1.
+
+Verified input-to-PNG message recovery for 14 raster formats:
+PNG, JPEG, BMP, GIF, TIFF, WebP, PPM, TGA, PCX, ICO, QOI, JPEG 2000, AVIF, HEIF.
+HEIF covers the HEIC/HEIF decoder used for phone photos.
+
+Additional coverage:
+- First-frame handling for animated GIF/APNG and multipage TIFF.
+- EXIF orientation applied before embedding.
+- PNG browser previews for non-browser-readable formats.
+- Exact extraction after pixel-preserving BMP, TIFF and lossless WebP conversion.
+- Rejection of a JPEG resave that damages the stored packet.
+- CLI JPEG input and validation that output filenames end in .png.
+- HTTP inspection, preview, embedding and extraction of JPEG inputs.
+- Original capacity, Unicode, alpha, CRC32 and request validation regressions.
+- Browser file-picker test with samples/sample_cover.jpg: PNG encoding and
+  exact recovery of "This message started with a JPG image." both succeeded.
+  Screenshots: 06_jpeg_input_encoded.jpg and 07_jpeg_message_recovered.jpg.
+
+Encoded outputs remain PNG, and the original CNS1 packet format is unchanged.
+
+Original PNG-only release verification follows
+--------------------------------------------
 Date: 12 November 2026
 
 Automated tests: 23 test methods passed.

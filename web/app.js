@@ -68,9 +68,10 @@ function renderSelection(mode) {
   $(`${mode}-upload`).hidden = !!item;
   $(`${mode}-preview`).hidden = !item;
   if (item) {
-    $(`${mode}-image`).src = `data:image/png;base64,${item.image}`;
+    $(`${mode}-image`).src = `data:image/png;base64,${item.preview}`;
     $(`${mode}-name`).textContent = item.name;
-    $(`${mode}-info`).textContent = `${item.info.width} × ${item.info.height} pixels · ${item.info.mode} · ${format(item.info.capacity_bytes)} message bytes capacity`;
+    const frameNote = item.info.first_frame_only ? ` · First frame of ${item.info.source_frames} only` : "";
+    $(`${mode}-info`).textContent = `${item.info.source_format} · ${item.info.width} × ${item.info.height} pixels · ${item.info.mode} · ${format(item.info.capacity_bytes)} message bytes capacity${frameNote}`;
   } else {
     $(`${mode}-image`).removeAttribute("src");
     $(`${mode}-info`).textContent = mode === "hide"
@@ -86,11 +87,11 @@ async function selectFile(mode, file) {
   renderSelection(mode);
   updateControls();
   if (!file) return;
-  if (file.size > 12 * 1024 * 1024) throw new Error("Choose a PNG no larger than 12 MiB.");
+  if (file.size > 12 * 1024 * 1024) throw new Error("Choose an image no larger than 12 MiB.");
   const image = await fileBase64(file);
   const info = await api("inspect", {image});
   if (sequence !== state.sequence[mode]) return;
-  state[mode] = {image, name: file.name, info};
+  state[mode] = {image, preview: info.preview, name: file.name, info};
   renderSelection(mode);
   updateControls();
 }
@@ -130,7 +131,7 @@ function showEncoding(result) {
   $("metric-changed").textContent = `${format(m.changed_channels)} (${m.changed_percent}%)`;
   $("metric-psnr").textContent = m.psnr_db === null ? "∞ dB" : `${m.psnr_db} dB`;
   $("metric-time").textContent = `${m.encode_ms} ms`;
-  $("compare-original").src = `data:image/png;base64,${state.hide.image}`;
+  $("compare-original").src = `data:image/png;base64,${state.hide.preview}`;
   $("compare-encoded").src = `data:image/png;base64,${result.image}`;
   $("bit-rows").replaceChildren();
   for (const sample of m.samples) {
@@ -188,7 +189,7 @@ $("encode").addEventListener("click", () => busy(async () => {
 $("decode").addEventListener("click", () => busy(extract));
 $("download-png").addEventListener("click", () => {
   if (!state.output) return;
-  const stem = state.hide.name.replace(/\.png$/i, "");
+  const stem = state.hide.name.replace(/\.[^.]+$/, "");
   download(imageBlob(state.output.image), `${stem}_encoded.png`);
 });
 $("download-text").addEventListener("click", () => download(new Blob([$("recovered").value], {type: "text/plain;charset=utf-8"}), "recovered_message.txt"));

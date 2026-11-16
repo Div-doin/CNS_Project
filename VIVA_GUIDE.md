@@ -2,8 +2,9 @@
 
 ## A one minute introduction
 
-My project hides a UTF-8 text message inside a PNG image using least significant
-bit steganography. It changes only the last bit of each red, green and blue
+My project accepts common raster image formats and hides a UTF-8 text message
+using least significant bit steganography. It saves the encoded image as PNG.
+It changes only the last bit of each red, green and blue
 sample. The resulting image looks very similar to the cover. The decoder reads
 the same channel bits and recovers the text. A format header stores the message
 length and a CRC32 checksum so the app can validate its own message format and
@@ -37,9 +38,20 @@ sample by at most 1. Changing higher bits would cause larger colour differences.
 the message bit, the value stays unchanged. For the supplied 77-byte example,
 728 bits are stored and 357 sample values change.
 
-**Why PNG?** Its lossless encoding preserves the pixel values used by the decoder.
-JPEG uses lossy compression, which can alter the embedded bits. Renaming a JPEG
-to `.png` does not convert it and the app checks the actual image format.
+**Can I use a JPG, GIF, TIFF or HEIC cover?** Yes. The updated app reads supported
+raster formats, applies EXIF orientation, normalises pixels to RGB/RGBA, and
+embeds the packet. Animations and multipage files use only the first frame/page.
+The interface reports the source format and first-frame selection.
+
+**Why does output stay PNG?** Its lossless encoding preserves the exact pixel
+values used by the decoder. A JPG input is decoded before embedding, then saved
+as PNG. Resaving that encoded image as JPEG can destroy its hidden bits.
+Renaming a file does not convert its format.
+
+**Does this support every possible image format?** No universal promise is
+possible. It supports raster images readable by installed Pillow decoders, with
+pillow-heif for HEIC/HEIF. Unsupported files get a useful error. SVG, PDF and
+formats requiring separate external renderers or RAW decoders are outside scope.
 
 **How much text fits?** There are three carrier bits per pixel. Divide total
 carrier bits by eight, discard any fractional byte, then reserve 14 bytes for the
@@ -78,7 +90,7 @@ pixel count. Embedding/extraction scales with the number of packet bits. Overall
 time is O(P + B), and memory is O(P + B), where P is pixel count and B is packet
 bytes. Compression costs depend on the image and PNG encoder.
 
-**Which part did Python implement?** All image validation, capacity checks,
+**Which part did Python implement?** All image loading and normalisation, capacity checks,
 bitwise embedding, framing, extraction and measurements. HTML/CSS/JavaScript
 provide the browser screens and send images to the Python process on loopback.
 
@@ -94,6 +106,7 @@ These are future work and are not implemented in the current version.
 
 - Add your name, USN, institution, department and guide to the report and slides.
 - Read `steganography.py` and be able to explain `encode`, `decode` and the header.
-- Practise using your own PNG and message rather than only the bundled sample.
+- Practise using your own JPG or other supported cover and message, then explain
+  why the resulting encoded file is PNG.
 - Keep an unmodified encoded PNG for the live demo and a spare local copy.
 - Run the tests on the evaluation computer before the demonstration.

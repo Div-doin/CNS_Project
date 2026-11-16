@@ -1,7 +1,8 @@
-"""Lossless PNG text steganography using one least significant bit per RGB channel.
+"""Image text steganography using one least significant bit per RGB channel.
 
 The format is intentionally small and documented for a CNS mini project.
-It conceals UTF-8 text; it does not encrypt or authenticate the text.
+Pillow-compatible raster inputs are normalised to RGB/RGBA. Output is lossless
+PNG so the embedded bits survive. Text is concealed, not encrypted.
 """
 
 from __future__ import annotations
@@ -14,7 +15,15 @@ import time
 import warnings
 import zlib
 
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageOps, UnidentifiedImageError
+
+try:
+    from pillow_heif import register_heif_opener
+except ImportError:
+    HEIF_AVAILABLE = False
+else:
+    register_heif_opener(thumbnails=False)
+    HEIF_AVAILABLE = True
 
 
 MAGIC = b"CNS1"
@@ -35,27 +44,45 @@ class EncodingResult:
     metrics: dict
 
 
-def load_png(data: bytes) -> Image.Image:
-    """Decode an actual, static PNG and normalise colour while keeping alpha."""
+def load_image(data: bytes) -> Image.Image:
+    """Decode the first raster frame, orient it, and normalise colour.
+
+    Identify files by their bytes, not their suffix or browser MIME type.
+    Document/vector formats requiring external renderers are excluded.
+    """
     if not data or len(data) > MAX_FILE_BYTES:
-        raise SteganographyError("Choose a PNG no larger than 12 MiB.")
+        raise SteganographyError("Choose an image no larger than 12 MiB.")
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("error", Image.DecompressionBombWarning)
             with Image.open(BytesIO(data)) as source:
-                if source.format != "PNG":
-                    raise SteganographyError("Only PNG images are supported. Convert your image to PNG first.")
+                source_format = source.format or "Unknown"
+                if source_format in {"EPS", "PDF", "WMF", "MPEG"}:
+                    raise SteganographyError("Choose a raster image such as JPG, PNG, WebP, GIF, BMP, TIFF, AVIF or HEIC.")
                 if source.width * source.height > MAX_PIXELS:
                     raise SteganographyError("Choose an image with at most 8 million pixels.")
-                if getattr(source, "n_frames", 1) != 1:
-                    raise SteganographyError("Animated PNGs are not supported. Choose a still image.")
-                mode = "RGBA" if "A" in source.getbands() or "transparency" in source.info else "RGB"
-                return source.convert(mode)
+                frames = getattr(source, "n_frames", 1)
+                source.seek(0)
+                oriented = ImageOps.exif_transpose(source)
+                mode = "RGBA" if "A" in oriented.getbands() or "transparency" in oriented.info else "RGB"
+                image = oriented.convert(mode)
+                image.info["source_format"] = source_format
+                image.info["source_frames"] = frames
+                return image
     except SteganographyError:
         raise
-    except (UnidentifiedImageError, OSError, ValueError, SyntaxError,
+    except (UnidentifiedImageError, OSError, ValueError, SyntaxError, EOFError,
+            NotImplementedError, ImportError, struct.error,
             Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
-        raise SteganographyError("This PNG cannot be read. Choose a valid, undamaged image.") from exc
+        raise SteganographyError(
+            "This image cannot be read. It may be damaged or need an unavailable decoder. "
+            "Try JPG, PNG, WebP, GIF, BMP, TIFF, AVIF or HEIC. For HEIC/HEIF, install the updated requirements."
+        ) from exc
+
+
+def load_png(data: bytes) -> Image.Image:
+    """Compatibility entry point for the original PNG-only engine callers."""
+    return load_image(data)
 
 
 def capacity(image: Image.Image) -> int:
@@ -63,11 +90,23 @@ def capacity(image: Image.Image) -> int:
     return max(0, (image.width * image.height * 3) // 8 - HEADER.size)
 
 
-def inspect_image(data: bytes) -> dict:
-    image = load_png(data)
-    return {"width": image.width, "height": image.height, "mode": image.mode,
+def inspect_image(data: bytes, *, include_preview: bool = False) -> dict:
+    image = load_image(data)
+    info = {"width": image.width, "height": image.height, "mode": image.mode,
             "capacity_bytes": capacity(image), "header_bytes": HEADER.size,
-            "file_bytes": len(data)}
+            "file_bytes": len(data), "source_format": image.info["source_format"],
+            "source_frames": image.info["source_frames"],
+            "first_frame_only": image.info["source_frames"] > 1,
+            "output_format": "PNG"}
+    if include_preview:
+        # Browsers cannot directly display every input format (for example TIFF
+        # and HEIC). A small PNG preview also matches normalised orientation.
+        preview = image.copy()
+        preview.thumbnail((960, 640))
+        buffer = BytesIO()
+        preview.save(buffer, format="PNG")
+        info["preview_png"] = buffer.getvalue()
+    return info
 
 
 def _channel_index(bit_index: int, channels: int) -> int:
@@ -94,7 +133,7 @@ def encode(data: bytes, message: str) -> EncodingResult:
         payload = message.encode("utf-8")
     except UnicodeEncodeError as exc:
         raise SteganographyError("The message contains an invalid text character.") from exc
-    image = load_png(data)
+    image = load_image(data)
     available = capacity(image)
     if len(payload) > available:
         raise SteganographyError(
@@ -133,6 +172,9 @@ def encode(data: bytes, message: str) -> EncodingResult:
         raise SteganographyError("The encoded PNG would exceed 12 MiB. Choose a smaller cover image.")
     return EncodingResult(png, {
         "width": image.width, "height": image.height, "mode": image.mode,
+        "source_format": image.info["source_format"], "output_format": "PNG",
+        "source_frames": image.info["source_frames"],
+        "first_frame_only": image.info["source_frames"] > 1,
         "message_bytes": len(payload), "message_characters": len(message),
         "capacity_bytes": available, "header_bytes": HEADER.size,
         "embedded_bits": len(packet) * 8, "changed_channels": changed,
@@ -147,7 +189,7 @@ def encode(data: bytes, message: str) -> EncodingResult:
 
 def decode(data: bytes) -> dict:
     started = time.perf_counter()
-    image = load_png(data)
+    image = load_image(data)
     if image.width * image.height * 3 < HEADER.size * 8:
         raise SteganographyError("No supported hidden message was found.")
     raw = image.tobytes()

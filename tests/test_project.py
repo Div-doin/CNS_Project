@@ -19,8 +19,8 @@ import zlib
 from PIL import Image
 
 from app import Handler, ThreadingHTTPServer, make_demo, process_action
-from steganography import (HEADER, MAX_FILE_BYTES, SteganographyError,
-                          capacity, decode, encode, inspect_image, load_png)
+from steganography import (HEADER, HEIF_AVAILABLE, MAX_FILE_BYTES, SteganographyError,
+                          capacity, decode, encode, inspect_image, load_image, load_png)
 
 
 def png(image):
@@ -107,26 +107,115 @@ class EngineTests(unittest.TestCase):
         with self.assertRaises(SteganographyError):
             encode(png(Image.new("RGB", (1, 1))), "a")
 
-    def test_invalid_file_and_jpeg_rejected(self):
-        jpeg = BytesIO()
-        Image.new("RGB", (30, 30)).save(jpeg, "JPEG")
-        for data in [b"", b"not an image", self.cover[:24], jpeg.getvalue()]:
+    def test_invalid_file_rejected(self):
+        for data in [b"", b"not an image", self.cover[:24], b'<svg xmlns="http://www.w3.org/2000/svg"/>']:
             with self.subTest(data_size=len(data)):
                 with self.assertRaises(SteganographyError):
-                    load_png(data)
+                    load_image(data)
 
-    def test_animation_rejected(self):
+    def test_animated_png_uses_first_frame(self):
         output = BytesIO()
         image = Image.new("RGB", (30, 30), "red")
         image.save(output, "PNG", save_all=True,
                    append_images=[Image.new("RGB", (30, 30), "blue")], duration=100, loop=0)
-        with self.assertRaisesRegex(SteganographyError, "Animated"):
-            load_png(output.getvalue())
+        info = inspect_image(output.getvalue())
+        self.assertTrue(info["first_frame_only"])
+        self.assertEqual(info["source_frames"], 2)
+        result = encode(output.getvalue(), "First frame")
+        self.assertEqual(decode(result.png)["message"], "First frame")
+        with Image.open(BytesIO(result.png)) as saved:
+            self.assertEqual(saved.format, "PNG")
+            self.assertEqual(saved.n_frames, 1)
+
+    def test_raster_input_formats_round_trip(self):
+        formats = ["PNG", "JPEG", "BMP", "GIF", "TIFF", "WEBP", "PPM", "TGA",
+                   "PCX", "ICO", "QOI", "JPEG2000", "AVIF"]
+        image = Image.new("RGB", (64, 48), (37, 103, 182))
+        for image_format in formats:
+            with self.subTest(image_format=image_format):
+                data = BytesIO()
+                image.save(data, image_format)
+                info = inspect_image(data.getvalue())
+                self.assertEqual(info["source_format"], image_format)
+                result = encode(data.getvalue(), f"Format {image_format}: नमस्ते 🔐")
+                self.assertEqual(result.metrics["source_format"], image_format)
+                self.assertEqual(result.metrics["output_format"], "PNG")
+                self.assertEqual(decode(result.png)["message"], f"Format {image_format}: नमस्ते 🔐")
+                with Image.open(BytesIO(result.png)) as saved:
+                    self.assertEqual(saved.format, "PNG")
+
+    @unittest.skipUnless(HEIF_AVAILABLE, "Install requirements.txt for HEIC/HEIF support")
+    def test_heic_input_round_trip(self):
+        data = BytesIO()
+        Image.new("RGB", (64, 48), (60, 120, 190)).save(data, "HEIF")
+        info = inspect_image(data.getvalue())
+        self.assertEqual(info["source_format"], "HEIF")
+        self.assertEqual(decode(encode(data.getvalue(), "HEIC photo 🔐").png)["message"], "HEIC photo 🔐")
+
+    def test_animated_gif_and_multipage_tiff_use_first_frame(self):
+        for image_format in ["GIF", "TIFF"]:
+            with self.subTest(image_format=image_format):
+                data = BytesIO()
+                first = Image.new("RGB", (64, 48), "red")
+                first.save(data, image_format, save_all=True,
+                           append_images=[Image.new("RGB", (64, 48), "blue")])
+                info = inspect_image(data.getvalue())
+                self.assertEqual(info["source_frames"], 2)
+                self.assertTrue(info["first_frame_only"])
+                normalised = load_image(data.getvalue())
+                self.assertEqual(normalised.getpixel((0, 0))[:3], (255, 0, 0))
+                result = encode(data.getvalue(), "Animated first frame")
+                self.assertTrue(result.metrics["first_frame_only"])
+                self.assertEqual(decode(result.png)["message"], "Animated first frame")
+
+    def test_exif_orientation_applied_before_embedding(self):
+        source = Image.new("RGB", (64, 48), (51, 102, 153))
+        exif = Image.Exif()
+        exif[274] = 6  # Rotate 90 degrees clockwise for upright display.
+        data = BytesIO()
+        source.save(data, "JPEG", exif=exif)
+        info = inspect_image(data.getvalue())
+        self.assertEqual((info["width"], info["height"]), (48, 64))
+        result = encode(data.getvalue(), "Upright photo")
+        with Image.open(BytesIO(result.png)) as saved:
+            self.assertEqual(saved.size, (48, 64))
+            self.assertNotIn(274, saved.getexif())
+        self.assertEqual(decode(result.png)["message"], "Upright photo")
+
+    def test_lossless_carrier_conversion_still_extracts(self):
+        packet = encode(self.cover, "Preserved RGB samples 🔐").png
+        for image_format, options in [("BMP", {}), ("TIFF", {"compression": "tiff_lzw"}),
+                                      ("WEBP", {"lossless": True})]:
+            with self.subTest(image_format=image_format):
+                output = BytesIO()
+                load_image(packet).save(output, image_format, **options)
+                self.assertEqual(decode(output.getvalue())["message"], "Preserved RGB samples 🔐")
+
+    def test_normalised_preview_is_png_and_bounded(self):
+        data = BytesIO()
+        Image.new("RGB", (1500, 1000), (37, 103, 182)).save(data, "TIFF")
+        info = inspect_image(data.getvalue(), include_preview=True)
+        self.assertEqual(info["source_format"], "TIFF")
+        with Image.open(BytesIO(info["preview_png"])) as preview:
+            self.assertEqual(preview.format, "PNG")
+            self.assertLessEqual(preview.width, 960)
+            self.assertLessEqual(preview.height, 640)
+        self.assertNotIn("preview_png", inspect_image(self.cover))
+
+    def test_lossy_resave_cannot_be_claimed_to_preserve_message(self):
+        result = encode(self.cover, "Do not resave this as JPEG")
+        lossy = BytesIO()
+        load_image(result.png).save(lossy, "JPEG", quality=40)
+        with self.assertRaises(SteganographyError):
+            decode(lossy.getvalue())
 
     def test_input_size_and_pixel_limits(self):
         with patch("steganography.MAX_PIXELS", 10):
             with self.assertRaisesRegex(SteganographyError, "million pixels"):
                 load_png(self.cover)
+        with patch("steganography.MAX_FILE_BYTES", 5):
+            with self.assertRaises(SteganographyError):
+                load_image(self.cover)
 
     def test_encoded_output_size_limit(self):
         with patch("steganography.MAX_FILE_BYTES", len(self.cover)):
@@ -154,9 +243,22 @@ class EngineTests(unittest.TestCase):
             self.assertEqual(output.read_bytes(), saved_output)
             self.assertEqual(run("extract", output, "--output", recovered).returncode, 0)
             self.assertEqual(recovered.read_bytes(), text_file.read_bytes())
-        with patch("steganography.MAX_FILE_BYTES", 5):
-            with self.assertRaises(SteganographyError):
-                load_png(self.cover)
+
+    def test_cli_jpeg_input_and_non_png_output_guard(self):
+        root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory(dir=root / "tests") as folder:
+            folder = Path(folder)
+            cover, output = folder / "photo.jpg", folder / "photo_encoded.png"
+            Image.new("RGB", (64, 48), (50, 100, 150)).save(cover, "JPEG")
+            command = [sys.executable, str(root / "cli.py"), "hide", str(cover), str(output), "--message", "JPG input"]
+            result = subprocess.run(command, capture_output=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(decode(output.read_bytes())["message"], "JPG input")
+            command[4] = str(folder / "bad_output.jpg")
+            result = subprocess.run(command, capture_output=True, timeout=15)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(b".png output filename", result.stderr)
+            self.assertFalse((folder / "bad_output.jpg").exists())
 
     def test_crc_detects_damaged_payload(self):
         result = encode(self.cover, "Hello")
@@ -235,6 +337,24 @@ class WebTests(unittest.TestCase):
         status, _, extracted = self.request("/api/extract", {"image": result["image"]})
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(extracted)["message"], "HTTP round trip 🔐")
+
+    def test_http_jpeg_inspection_preview_and_encoding(self):
+        data = BytesIO()
+        Image.new("RGB", (64, 48), (60, 130, 190)).save(data, "JPEG")
+        image = base64.b64encode(data.getvalue()).decode()
+        status, _, body = self.request("/api/inspect", {"image": image})
+        self.assertEqual(status, 200)
+        info = json.loads(body)
+        self.assertEqual(info["source_format"], "JPEG")
+        with Image.open(BytesIO(base64.b64decode(info["preview"]))) as preview:
+            self.assertEqual(preview.format, "PNG")
+        status, _, body = self.request("/api/hide", {"image": image, "message": "Photo to PNG"})
+        self.assertEqual(status, 200)
+        result = json.loads(body)
+        self.assertEqual(result["metrics"]["source_format"], "JPEG")
+        status, _, body = self.request("/api/extract", {"image": result["image"]})
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["message"], "Photo to PNG")
 
     def test_frontend_and_demo_routes(self):
         for route in ["/", "/style.css", "/app.js", "/api/demo"]:

@@ -43,15 +43,17 @@ def make_demo() -> bytes:
 
 def process_action(action: str, body: dict) -> dict:
     if not isinstance(body, dict) or not isinstance(body.get("image"), str):
-        raise SteganographyError("Select a PNG image first.")
+        raise SteganographyError("Select an image first.")
     if len(body["image"]) > ((MAX_FILE_BYTES + 2) // 3) * 4:
-        raise SteganographyError("Choose a PNG no larger than 12 MiB.")
+        raise SteganographyError("Choose an image no larger than 12 MiB.")
     try:
         data = base64.b64decode(body["image"], validate=True)
     except (binascii.Error, ValueError) as exc:
         raise SteganographyError("The image upload is invalid. Please select it again.") from exc
     if action == "inspect":
-        return inspect_image(data)
+        info = inspect_image(data, include_preview=True)
+        info["preview"] = base64.b64encode(info.pop("preview_png")).decode("ascii")
+        return info
     if action == "hide":
         result = encode(data, body.get("message"))
         return {"image": base64.b64encode(result.png).decode("ascii"), "metrics": result.metrics}
@@ -135,7 +137,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             size = int(self.headers.get("Content-Length", "0"))
             if size <= 0 or size > MAX_REQUEST:
-                self._json(413, {"error": "The upload is too large or empty. Maximum PNG size is 12 MiB."})
+                self._json(413, {"error": "The upload is too large or empty. Maximum image size is 12 MiB."})
                 return
             self.connection.settimeout(30)
             body = json.loads(self.rfile.read(size))
