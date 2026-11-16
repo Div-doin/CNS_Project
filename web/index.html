@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Image Steganography · CNS Mini Project</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar"><a class="brand" href="/">◈ <span>Image Steganography</span></a><span class="local">Runs on your computer</span></header>
+  <main>
+    <div class="intro"><p class="eyebrow">CRYPTOGRAPHY AND NETWORK SECURITY</p><h1>Hide a message inside an image.</h1><p class="lede">Explore least significant bits. Save a PNG, then recover the text hidden in its pixels.</p></div>
+    <div class="workspace">
+      <div class="tabs" role="tablist" aria-label="Choose an operation">
+        <button id="hide-tab" role="tab" aria-selected="true" aria-controls="hide-panel" class="tab active">01 &nbsp; Hide a message</button>
+        <button id="extract-tab" role="tab" aria-selected="false" aria-controls="extract-panel" tabindex="-1" class="tab">02 &nbsp; Extract a message</button>
+      </div>
+      <div id="notice" class="notice" role="alert" hidden></div>
+      <section id="hide-panel" role="tabpanel" aria-labelledby="hide-tab">
+        <div class="columns">
+          <div class="image-column">
+            <div class="section-heading"><h2>Your cover image</h2><button class="text-button action" id="demo">Try a sample</button></div>
+            <label class="upload" id="hide-upload" for="hide-file"><span class="upload-symbol">＋</span><strong>Choose a PNG image</strong><span>Up to 12 MiB and 8 million pixels</span></label>
+            <input id="hide-file" class="file-input" type="file" accept="image/png,.png" aria-label="Choose cover PNG">
+            <div id="hide-preview" class="preview" hidden><img id="hide-image" alt="Selected cover image"><div class="image-caption"><span id="hide-name"></span><button class="text-button action" id="hide-change">Change image</button></div></div>
+            <p id="hide-info" class="muted info">The original file stays unchanged. Your output is a separate PNG.</p>
+          </div>
+          <div class="message-column">
+            <h2>Your secret message</h2>
+            <label class="sr-only" for="message">Text to hide</label><textarea id="message" spellcheck="false" placeholder="Type the message you want to hide…"></textarea>
+            <div class="capacity-line"><span id="byte-count">0 UTF-8 bytes</span><span id="capacity-text">Select an image to see capacity</span></div>
+            <progress id="capacity-meter" max="100" value="0" aria-label="Message capacity used"></progress>
+            <button id="encode" class="primary action" disabled>Hide message and create PNG <span>↗</span></button>
+            <p class="small-note">LSB steganography conceals text. It does not encrypt it or require a password.</p>
+          </div>
+        </div>
+        <section id="hide-result" class="result" aria-labelledby="result-heading" hidden>
+          <div class="result-heading"><div><p class="eyebrow">ENCODING COMPLETE</p><h2 id="result-heading">Your message is inside the pixels.</h2></div><div class="button-row"><button id="use-output" class="secondary action">Test extraction</button><button id="download-png" class="primary action">Download PNG ↓</button></div></div>
+          <div class="metrics"><div><span>Message size</span><strong id="metric-bytes"></strong></div><div><span>RGB values changed</span><strong id="metric-changed"></strong></div><div><span>Image quality PSNR</span><strong id="metric-psnr"></strong></div><div><span>Encoding time</span><strong id="metric-time"></strong></div></div>
+          <details id="pixel-details"><summary>See the original, output and actual bit changes</summary>
+            <div class="comparison"><figure><img id="compare-original" alt="Original RGB cover"><figcaption>Original</figcaption></figure><figure><img id="compare-encoded" alt="Image carrying the hidden message"><figcaption>Encoded PNG</figcaption></figure></div>
+            <p class="muted">These are the first eight embedded bits, which store the first byte of the format header. Each RGB value changes by at most one.</p>
+            <div class="table-wrap"><table><thead><tr><th>Pixel</th><th>Channel</th><th>Before</th><th>Hidden bit</th><th>After</th></tr></thead><tbody id="bit-rows"></tbody></table></div>
+          </details>
+        </section>
+      </section>
+      <section id="extract-panel" role="tabpanel" aria-labelledby="extract-tab" hidden>
+        <div class="columns">
+          <div class="image-column"><div class="section-heading"><h2>Your encoded image</h2></div>
+            <label class="upload" id="extract-upload" for="extract-file"><span class="upload-symbol">＋</span><strong>Choose an encoded PNG</strong><span>Use a PNG created by this application</span></label>
+            <input id="extract-file" class="file-input" type="file" accept="image/png,.png" aria-label="Choose encoded PNG">
+            <div id="extract-preview" class="preview" hidden><img id="extract-image" alt="Selected image for extraction"><div class="image-caption"><span id="extract-name"></span><button class="text-button action" id="extract-change">Change image</button></div></div>
+            <p id="extract-info" class="muted info">Use the original encoded PNG. Resizing or JPEG conversion can damage its hidden text.</p>
+            <button id="decode" class="primary action" disabled>Extract hidden message <span>↗</span></button>
+          </div>
+          <div class="message-column"><h2>Recovered message</h2><div id="extract-empty" class="empty-result"><span>⌁</span><p>Your recovered text will appear here.</p><p class="muted">The application checks the format header, message length and CRC32 checksum.</p></div>
+            <div id="extract-result" hidden><p class="success-label">✓ Message recovered · checksum matches</p><label class="sr-only" for="recovered">Recovered text</label><textarea id="recovered" readonly spellcheck="false"></textarea><p id="decode-stats" class="muted"></p><button class="secondary action" id="download-text">Save message as TXT ↓</button></div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <section class="explanation"><div><span class="step">01</span><h3>Text becomes bits</h3><p>UTF-8 preserves your message, including Unicode characters.</p></div><div><span class="step">02</span><h3>Bits enter the pixels</h3><p>One bit replaces the last bit of each red, green and blue value.</p></div><div><span class="step">03</span><h3>A PNG preserves them</h3><p>Lossless storage lets this app recover the exact message.</p></div></section>
+    <footer><span>CNS Mini Project · Module 1 · Steganography</span><span>Local processing. No cloud uploads.</span></footer>
+  </main>
+</body>
+</html>

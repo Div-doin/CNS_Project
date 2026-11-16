@@ -1,0 +1,40 @@
+Image Steganography project verification
+Date: 12 November 2026
+
+Automated tests: 23 test methods passed.
+Command: python -m unittest discover -s tests -v
+The tests include additional subtests and generated inputs.
+
+Environment used for recorded measurements:
+Windows, Python 3.12.14, Pillow 13.0.0.
+The Windows launcher was also verified with Python 3.13.3 and Pillow 13.0.0.
+All 23 tests passed in that environment, and the running app returned HTTP 200.
+
+Verified in the browser:
+- Load the sample cover and display message capacity.
+- Hide the sample message and display pixel measurements.
+- Download the actual encoded PNG.
+- Recover the exact message and show a matching CRC32.
+- Select a damaged PNG through the file picker and report a checksum mismatch.
+- Check the interface at phone and desktop widths without horizontal overflow.
+
+Reproducible sample:
+Cover: samples/sample_cover.png, 720 by 480 RGB pixels.
+Message: samples/sample_message.txt, 77 UTF-8 bytes.
+Output: samples/sample_encoded.png, 5,374 bytes.
+Header: 14 bytes. Total embedded bits: 728.
+Changed RGB samples: 357 of 1,036,800, or 0.034433 percent.
+Maximum RGB change: 1 colour level.
+PSNR: 82.76 dB.
+CRC32: 4FD7A453.
+Recovery: exact match.
+The browser-downloaded PNG matches the engine output byte for byte.
+
+Timing medians across three runs on the same cover:
+Payload bytes   Encode ms   Extract ms   PSNR dB
+77              26.38       9.33         82.76
+1024            34.61       15.33        72.89
+10240           123.27      75.97        62.12
+
+The larger timing payloads repeat ASCII A. Timings exclude local transport and
+vary with the computer. High PSNR describes small pixel error, not secure hiding.
